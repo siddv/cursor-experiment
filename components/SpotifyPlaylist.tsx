@@ -1,63 +1,57 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { SpotifyPlaylist as SpotifyPlaylistType } from '@/types';
+
+interface Track {
+  id: string;
+  name: string;
+  artists: { name: string }[];
+  album: {
+    name: string;
+    images: { url: string }[];
+  };
+  external_urls: {
+    spotify: string;
+  };
+}
 
 interface SpotifyPlaylistProps {
   playlist: SpotifyPlaylistType;
 }
 
 export default function SpotifyPlaylist({ playlist }: SpotifyPlaylistProps) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check for error in URL
-    const params = new URLSearchParams(window.location.search);
-    const error = params.get('error');
-    if (error) {
-      switch (error) {
-        case 'auth_failed':
-          setError('Authentication failed. Please try again.');
-          break;
-        case 'no_code':
-          setError('No authorization code received. Please try again.');
-          break;
-        case 'token_exchange_failed':
-          setError('Failed to complete authentication. Please try again.');
-          break;
-        case 'server_error':
-          setError('A server error occurred. Please try again later.');
-          break;
-        default:
-          setError('An error occurred. Please try again.');
+    const fetchTracks = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const year = parseInt(playlist.name.match(/\d{4}/)?.[0] || '2024');
+        const response = await fetch(`/api/spotify/search?year=${year}`);
+        if (!response.ok) {
+          if (response.status === 401) {
+            setError('Please connect to Spotify to view songs');
+            return;
+          }
+          throw new Error('Failed to fetch tracks');
+        }
+        const data = await response.json();
+        setTracks(data.tracks.items);
+      } catch (err) {
+        setError('Failed to load tracks');
+        console.error('Error fetching tracks:', err);
+      } finally {
+        setLoading(false);
       }
-    }
+    };
 
-    // Check if we have a Spotify token
-    fetch('/api/auth/check')
-      .then(response => response.json())
-      .then(data => setIsAuthenticated(data.authenticated))
-      .catch(error => {
-        console.error('Error checking authentication:', error);
-        setIsAuthenticated(false);
-      });
-  }, []);
-
-  const handleSpotifyLogin = () => {
-    const clientId = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID;
-    const redirectUri = process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI;
-    const scope = 'user-read-private user-read-email playlist-read-private';
-
-    const authUrl = new URL('https://accounts.spotify.com/authorize');
-    authUrl.searchParams.append('client_id', clientId || '');
-    authUrl.searchParams.append('response_type', 'code');
-    authUrl.searchParams.append('redirect_uri', redirectUri || '');
-    authUrl.searchParams.append('scope', scope);
-
-    window.location.href = authUrl.toString();
-  };
+    fetchTracks();
+  }, [playlist]);
 
   return (
     <motion.div
@@ -66,44 +60,84 @@ export default function SpotifyPlaylist({ playlist }: SpotifyPlaylistProps) {
       transition={{ duration: 0.5 }}
       className="bg-white/10 backdrop-blur-md rounded-xl p-6"
     >
-      {error && (
-        <div className="mb-4 p-4 bg-red-500/20 rounded-lg text-white text-sm">
-          {error}
-        </div>
-      )}
+      <h3 className="text-xl font-semibold text-white mb-4">Top Songs from {playlist.name.match(/\d{4}/)?.[0]}</h3>
       
-      <div className="aspect-square relative mb-4">
-        <img
-          src={playlist.imageUrl}
-          alt={playlist.name}
-          className="w-full h-full object-cover rounded-lg"
-        />
-        <div className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center">
-          {!isAuthenticated ? (
-            <button
-              onClick={handleSpotifyLogin}
-              className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-full font-medium transition-colors"
-            >
-              Connect Spotify
-            </button>
-          ) : (
+      <AnimatePresence mode="wait">
+        {loading ? (
+          <motion.div
+            key="loading"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="space-y-4"
+          >
+            {[...Array(3)].map((_, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className="flex items-center space-x-4 p-3 bg-white/5 rounded-lg"
+              >
+                <div className="w-12 h-12 rounded bg-white/10 animate-pulse" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-white/10 rounded w-3/4 animate-pulse" />
+                  <div className="h-3 bg-white/10 rounded w-1/2 animate-pulse" />
+                  <div className="h-3 bg-white/10 rounded w-2/3 animate-pulse" />
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        ) : error ? (
+          <motion.div
+            key="error"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="text-center"
+          >
+            <p className="text-white mb-4">{error}</p>
             <a
-              href={playlist.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-full font-medium transition-colors"
+              href="/api/auth/spotify"
+              className="inline-block bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
             >
-              Open in Spotify
+              Connect to Spotify
             </a>
-          )}
-        </div>
-      </div>
-      <h3 className="text-xl font-semibold text-white mb-2">{playlist.name}</h3>
-      <p className="text-white/80 text-sm">
-        {!isAuthenticated
-          ? 'Connect your Spotify account to access this playlist'
-          : 'Click to open this playlist in Spotify'}
-      </p>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="tracks"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="space-y-4"
+          >
+            {tracks.map((track, index) => (
+              <motion.a
+                key={track.id}
+                href={track.external_urls.spotify}
+                target="_blank"
+                rel="noopener noreferrer"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className="flex items-center space-x-4 p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <img
+                  src={track.album.images[0]?.url}
+                  alt={track.album.name}
+                  className="w-12 h-12 rounded"
+                />
+                <div>
+                  <p className="text-white font-medium">{track.name}</p>
+                  <p className="text-white/70 text-sm">{track.artists[0].name}</p>
+                  <p className="text-white/50 text-xs">{track.album.name}</p>
+                </div>
+              </motion.a>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 } 

@@ -9,12 +9,13 @@ interface YearSelectorProps {
 
 export default function YearSelector({ onYearSelect, currentYear }: YearSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const currentDecade = Math.floor(currentYear / 10) * 10;
   const startYear = 1920;
   const endYear = new Date().getFullYear();
+  
+  // Generate decades starting from most recent
   const decades = Array.from(
-    { length: Math.ceil((endYear - startYear) / 10) + 1 },
-    (_, i) => startYear + i * 10
+    { length: Math.floor((endYear - startYear) / 10) + 1 },
+    (_, i) => Math.floor(endYear / 10) * 10 - i * 10
   );
 
   return (
@@ -62,8 +63,9 @@ export default function YearSelector({ onYearSelect, currentYear }: YearSelector
                 <div key={decade} className="space-y-2">
                   <h3 className="text-white/60 text-sm font-semibold px-2">{decade}s</h3>
                   <div className="grid grid-cols-2 gap-2">
-                    {Array.from({ length: 10 }, (_, i) => decade + i).map((year) => (
-                      year <= endYear && (
+                    {Array.from({ length: 10 }, (_, i) => decade + 9 - i)
+                      .filter(year => year <= endYear && year >= startYear)
+                      .map((year) => (
                         <motion.button
                           key={year}
                           whileHover={{ scale: 1.05 }}
@@ -80,8 +82,7 @@ export default function YearSelector({ onYearSelect, currentYear }: YearSelector
                         >
                           {year}
                         </motion.button>
-                      )
-                    ))}
+                      ))}
                   </div>
                 </div>
               ))}
